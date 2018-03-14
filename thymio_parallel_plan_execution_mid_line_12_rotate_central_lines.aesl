@@ -1,0 +1,362 @@
+<!DOCTYPE aesl-source>
+<network>
+
+
+<!--list of global events-->
+
+
+<!--list of constants-->
+
+
+<!--show keywords state-->
+<keywords flag="true"/>
+
+
+<!--node thymio-II-->
+<node nodeId="1" name="thymio-II">### OPERABLE VARIABLES
+var move_forward = 0
+var rotate_left = 0
+var rotate_right = 0
+var rotation_complete = 0
+var prepare_for_next_move = 0
+
+var allow_preparation = 0
+var allow_rotate_left = 0
+var allow_rotate_right = 0
+var first_touch = 1
+
+var idle = 0
+var hold_lights_off_on = 0
+### POSSIBLE STATES
+#
+#	Move - > State 1
+#	Turn Left -> State 2
+#	Turn Right -> State 3
+#	Wait - > State 4
+#
+###
+# length = 0...num_states +1 + 99, -1
+var states[] = [4, 1, 2, 1, 4, 99, -1]
+var state_step = -1
+var current_state = 0
+var num_states = 7-1
+
+# SET ROBOT RGB COLORS
+var r_top = 16
+var g_top = 0
+var b_top = 0
+
+### GLOBAL EVENT VARIABLES
+## timers
+var timer0_period = 4500
+var timer1_period = 1000
+
+## movement speed variables
+# forward movement
+var default_speed = 300 
+var line_follow_acc = default_speed / 2
+var line_follow_break = - ( default_speed / 4 )
+#var default_speed = 400 
+#var line_follow_acc = 100
+#var line_follow_break = -50
+# rotation 
+var rotation_speed_acc = ( default_speed / 2 ) + 50 
+var rotation_speed_reverse = - ( ( default_speed / 2 ) + 50  ) 
+#var rotation_speed_acc = 150
+#var rotation_speed_reverse = -150  
+
+## thresholds
+var threshold_black_white = 500 
+
+## distance thresholds
+var diagonal_dist = 2500
+var direct_dist = 3000
+
+
+## TEMP. DISABLED, USE CENTRAL AND BACK BUTTON
+# play loud sound or clap to initiate
+mic.threshold = 50
+
+call leds.top(15,15,0)
+
+onevent prox
+	if  idle == 1 then
+		if prox.horizontal[5] > direct_dist then
+			call leds.top(15,15,15)
+		else
+			# intitiate operation
+			timer.period[0] = timer0_period
+			timer.period[1] = timer1_period
+		end
+	end
+	
+	### LEFT ROTATION
+	if rotate_left == 1 then
+		## START FROM BLACK SURFACE, GOING TO WHITE TRANSITION
+		if first_touch == 1 then
+			motor.left.target = rotation_speed_reverse
+			motor.right.target = rotation_speed_acc
+			if prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				first_touch = 0
+			end
+		## END ON BLACK RE-SURFACE, AFTER WHITE TRANSITION
+		elseif first_touch == 0 then
+			if prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = rotation_speed_reverse
+				motor.right.target = rotation_speed_acc
+			elseif prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = 0
+				motor.right.target = 0
+				rotate_left = 0
+			end
+		end
+	
+	### RIGHT ROTATION		
+	elseif rotate_right == 1 then
+		## START FROM BLACK SURFACE, GOING TO WHITE TRANSITION
+		if first_touch == 1 then
+			motor.left.target = rotation_speed_acc
+			motor.right.target = rotation_speed_reverse
+			if prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				first_touch = 0
+			end
+		## END ON BLACK RE-SURFACE, AFTER WHITE TRANSITION
+		elseif first_touch == 0 then
+			if prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > 450 then
+				motor.left.target = rotation_speed_acc
+				motor.right.target = rotation_speed_reverse
+			elseif prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = 0
+				motor.right.target = 0
+				rotate_right = 0
+			end
+		end
+	
+	### FORWARD MOVEMENT - LINE FOLLOW
+	elseif move_forward == 1 then
+
+		if  first_touch == 1 then
+			if prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = default_speed
+				motor.right.target = default_speed
+			elseif prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = default_speed
+				motor.right.target = default_speed
+				first_touch = 0
+			elseif prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = line_follow_break
+				motor.right.target = line_follow_acc
+			elseif prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = line_follow_acc
+				motor.right.target = line_follow_break
+			else
+				call leds.top(r_top, g_top, b_top)
+			end
+		elseif first_touch == 0 then
+			## STRAIGHT DRIVE ( WHITE SURFACE BOTH SENSORS )
+			if prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				#motor.left.target = 0
+				#motor.right.target = 0
+				motor.left.target = default_speed
+				motor.right.target = default_speed
+				allow_preparation = 1
+				move_forward = 0
+				first_touch = 1
+			## FIELD REACHED ( BLACK SURFACE BOTH SENSORS )
+			elseif prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = default_speed
+				motor.right.target = default_speed
+			## LEFT LINE CORRECTION ( SENSORS: Left: BLACK - Right: WHIITE )
+			elseif prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = line_follow_break
+				motor.right.target = line_follow_acc
+			## RIGHT LINE CORRECTION ( SENSORS: Left: WHITE - Right: BLACK )
+			elseif prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = line_follow_acc
+				motor.right.target = line_follow_break
+			else
+				call leds.top(r_top, g_top, b_top)
+			end
+		end
+		
+		# CHECK AT THE END, SO THE STOP DOESN'T GET OVERRUN
+		if  prox.horizontal[0] > diagonal_dist or prox.horizontal[4] > diagonal_dist or
+			prox.horizontal[1] > diagonal_dist or prox.horizontal[3] > diagonal_dist or
+			prox.horizontal[2] > direct_dist 
+		then
+			motor.left.target = 0
+			motor.right.target = 0				
+		end
+	
+
+		
+	### INSIDE FIELD MOVEMENT ( after FORWARD MOVEMENT )
+	elseif prepare_for_next_move == 1 then
+				
+		if first_touch == 1 then
+			## BEGIN MOVEMENT FROM BLACK SURFACE
+			if prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = default_speed
+				motor.right.target = default_speed
+			## CONTINUE WITH FORWARD MOVEMENT, NOTE WHITE SURFACE ( field center )
+			elseif prox.ground.delta[0] > threshold_black_white or prox.ground.delta[1] > threshold_black_white then
+				motor.right.target = default_speed
+				motor.left.target = default_speed
+				first_touch = 0
+			end		
+		elseif first_touch == 0 then
+			## INSIDE FIELD CENTER
+			## LEFT LINE CORRECTION ( SENSORS: Left: BLACK - Right: WHIITE )
+			if prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] > threshold_black_white then
+				motor.left.target = line_follow_break
+				motor.right.target = line_follow_acc
+			## RIGHT LINE CORRECTION ( SENSORS: Left: WHITE - Right: BLACK )
+			elseif prox.ground.delta[0] > threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = line_follow_acc
+				motor.right.target = line_follow_break
+			## STRAIGHT DRIVE ( WHITE SURFACE BOTH SENSORS )
+			elseif prox.ground.delta[0] > threshold_black_white or prox.ground.delta[1] > threshold_black_white then
+				motor.right.target = default_speed
+				motor.left.target = default_speed
+			## FIELD END REACHED ( BLACK SURFACE BOTH SENSORS )
+			elseif prox.ground.delta[0] &lt; threshold_black_white and prox.ground.delta[1] &lt; threshold_black_white then
+				motor.left.target = 0
+				motor.right.target = 0
+				allow_preparation = 0
+				prepare_for_next_move = 0
+				first_touch = 1
+			end		
+		end
+
+		# CHECK AT THE END, SO THE STOP DOESN'T GET OVERRUN
+		if  prox.horizontal[0] > diagonal_dist or prox.horizontal[4] > diagonal_dist or
+			prox.horizontal[1] > diagonal_dist or prox.horizontal[3] > diagonal_dist or
+			prox.horizontal[2] > direct_dist 
+		then
+			motor.left.target = 0
+			motor.right.target = 0				
+		end
+	end
+
+sub reset_between_states
+	# reset between states
+	move_forward = 0
+	rotate_left = 0
+	rotate_right = 0
+	rotation_complete = 0
+	prepare_for_next_move = 0
+
+	allow_preparation = 0
+	allow_rotate_left = 0
+	allow_rotate_right = 0
+	first_touch = 1
+
+onevent button.center
+	
+	idle = 1
+	
+	# moving to horizontal prox
+	# intitiate operation
+	#timer.period[0] = timer0_period
+	#timer.period[1] = timer1_period
+
+
+onevent button.backward
+
+	# used to reset everything (all variables and states)
+	# reset motors (stop)
+	motor.left.target = 0
+	motor.right.target = 0
+	
+	# reset timers (stop state changes)
+	timer.period[0] = 0
+	timer.period[1] = 0
+	
+	# movement and state related variables
+	move_forward = 0
+	rotate_left = 0
+	rotate_right = 0
+	rotation_complete = 0
+	prepare_for_next_move = 0
+	
+	allow_preparation = 0
+	allow_rotate_left = 0
+	allow_rotate_right = 0
+	first_touch = 1
+	
+	state_step = -1
+	current_state = 0
+	
+	idle = 0
+	
+	call leds.top(15,15,0)
+		
+onevent timer0
+	## determine which state the robot is in
+	state_step += 1
+	
+	if state_step > num_states then
+		state_step = num_states
+	end
+	current_state = states[state_step]
+	# in each step reset variables
+	callsub reset_between_states
+	call leds.top(r_top, g_top, b_top)
+	
+	## RESET BETWEEN STATES
+	motor.left.target = 0
+	motor.right.target = 0
+	
+	
+	# act accordingly with current state 
+	# initial state - prepare for execution
+	if current_state == 0 then
+		call leds.top(r_top, g_top, b_top)
+	
+	# State 1 - move forward
+	elseif current_state == 1 then
+		move_forward = 1
+	
+	# State 2 - rotate left
+	elseif current_state == 2 then
+		rotate_left = 1
+	
+	# State 3 - rotate right
+	elseif current_state == 3 then
+		rotate_right = 1
+	
+	# State 4 - hold / wait
+	elseif current_state == 4 then
+		#hold_lights_off_on = 1
+	# FINAL STATE - COMPLETE
+	elseif current_state == 99 then
+		motor.left.target = 0
+		motor.right.target = 0
+		call sound.play(6)
+	else
+		timer.period[0] = 0
+		timer.period[1] = 0
+	end
+	
+
+onevent timer1
+	if allow_preparation == 1 then
+		prepare_for_next_move = 1
+		first_touch = 1
+	elseif allow_rotate_left == 1 then
+		rotate_left = 1
+	elseif allow_rotate_right == 1 then
+		rotate_right = 1
+	end
+	
+	if hold_lights_off_on == 0 and current_state == 4 then
+		hold_lights_off_on = 1
+		call leds.top(r_top, g_top, b_top)
+	elseif hold_lights_off_on == 1 and current_state == 4 then
+		hold_lights_off_on = 0	
+		call leds.top(0,0,0)
+	end
+</node>
+
+
+</network>
